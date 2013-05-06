@@ -1023,9 +1023,25 @@ bool GetTransaction(const uint256 &hash, CTransaction &txOut, uint256 &hashBlock
     return false;
 }
 
-
-
-
+bool GetBlockTransaction(const uint256 &hash, CTransaction &txOut)
+{
+  CDiskTxPos postx;
+  if (pblocktree->ReadTxIndex(hash, postx)) {
+      CAutoFile file(OpenBlockFile(postx, true), SER_DISK, CLIENT_VERSION);
+      CBlockHeader header;
+      try {
+          file >> header;
+          fseek(file, postx.nTxOffset, SEEK_CUR);
+          file >> txOut;
+      } catch (std::exception &e) {
+          return error("%s() : deserialize or I/O error", __PRETTY_FUNCTION__);
+      }
+      if (txOut.GetHash() != hash)
+          return error("%s() : txid mismatch", __PRETTY_FUNCTION__);
+      return true;
+  }
+  return false;
+}
 
 
 //////////////////////////////////////////////////////////////////////////////
