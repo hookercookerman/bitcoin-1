@@ -235,31 +235,15 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
 
 Value getextendedrawtransaction(const Array& params, bool fHelp)
 {
-  if (fHelp || params.size() < 1 || params.size() > 2)
-      throw runtime_error(
-          "getrawtransaction <txid> [verbose=0]\n"
-          "If verbose=0, returns a string that is\n"
-          "serialized, hex-encoded data for <txid>.\n"
-          "If verbose is non-zero, returns an Object\n"
-          "with information about <txid>.");
+  if (fHelp || params.size() < 1)
+      throw runtime_error("getrawtransaction <txid> \n");
 
   uint256 hash = ParseHashV(params[0], "parameter 1");
-
-  bool fVerbose = false;
-  if (params.size() > 1)
-      fVerbose = (params[1].get_int() != 0);
 
   CTransaction tx;
   uint256 hashBlock = 0;
   if (!GetTransaction(hash, tx, hashBlock, true))
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available about transaction");
-
-  CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
-  ssTx << tx;
-  string strHex = HexStr(ssTx.begin(), ssTx.end());
-
-  if (!fVerbose)
-      return strHex;
 
   Object result;
   TxToExtendedJSON(tx, hashBlock, result);
