@@ -151,7 +151,7 @@ void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& e
       }
     }
     entry.push_back(Pair("vout", vout));
-    entry.push_back(Pair("destination_address", destination_addresses));
+    entry.push_back(Pair("destination_addresses", destination_addresses));
     entry.push_back(Pair("sender_addresses", sender_addresses));
     entry.push_back(Pair("total_output", ValueFromAmount(total)));
     entry.push_back(Pair("total_input", ValueFromAmount(total_in)));
