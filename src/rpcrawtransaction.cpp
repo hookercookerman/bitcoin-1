@@ -166,6 +166,7 @@ void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& e
             CBlockIndex* pindex = (*mi).second;
             if (pindex->IsInMainChain())
             {
+                entry.push_back(Pair("blockheight", pindex->nHeight));
                 entry.push_back(Pair("confirmations", 1 + nBestHeight - pindex->nHeight));
                 entry.push_back(Pair("time", (boost::int64_t)pindex->nTime));
                 entry.push_back(Pair("blocktime", (boost::int64_t)pindex->nTime));
