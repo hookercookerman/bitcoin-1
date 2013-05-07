@@ -86,8 +86,7 @@ Object blockToExtendedJSON(const CBlock& block, const CBlockIndex* blockindex)
     BOOST_FOREACH(const CTransaction&tx, block.vtx)
     {
       Object tx_result;
-      uint256 hashBlock = 0;
-      TxToExtendedJSON(tx, hashBlock, tx_result);
+      TxToExtendedJSON(tx, block.GetHash(), tx_result);
       txs.push_back(tx_result);
     }
 
