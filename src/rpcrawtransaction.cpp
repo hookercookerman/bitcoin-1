@@ -93,11 +93,15 @@ void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& e
     int64 total_in = 0;
     Array sender_address;
     Array sender_addresses;
+    bool coinbase = false;
     BOOST_FOREACH(const CTxIn& txin, tx.vin)
     {
         Object in;
         if (tx.IsCoinBase())
-            in.push_back(Pair("coinbase", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
+        {
+          in.push_back(Pair("coinbase", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
+          coinbase = true;
+        }
         else
         {
             in.push_back(Pair("txid", txin.prevout.hash.GetHex()));
@@ -155,7 +159,16 @@ void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& e
     entry.push_back(Pair("sender_addresses", sender_addresses));
     entry.push_back(Pair("total_output", ValueFromAmount(total)));
     entry.push_back(Pair("total_input", ValueFromAmount(total_in)));
-    entry.push_back(Pair("fee", ValueFromAmount(total_in - total)));
+    if (coinbase)
+    {
+      entry.push_back(Pair("fee", 0));
+      entry.push_back(Pair("coinbase", true));
+    }
+    else
+    {
+      entry.push_back(Pair("fee", ValueFromAmount(total_in - total)));
+      entry.push_back(Pair("coinbase", false));
+    }
 
     if (hashBlock != 0)
     {
