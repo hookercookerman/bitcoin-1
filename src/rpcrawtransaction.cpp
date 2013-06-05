@@ -18,9 +18,6 @@ using namespace boost;
 using namespace boost::assign;
 using namespace json_spirit;
 
-// extend raw transaction to get outputs
-Value gettxout(const Array& params, bool fHelp);
-
 //
 // Utilities: convert hex-encoded Values
 // (throws error if not hex).
@@ -87,22 +84,32 @@ void Addresses(const CScript& scriptPubKey, vector<CTxDestination>& addresses){
   }
 }
 
-void GetTxoutSender(string strHash, int n, Object& o)
+bool GetTxoutForSender(uint256 hash, int n, int64& total, vector<CTxDestination>& addresses, Object& in)
 {
   CCoins coins;
-  uint256 hash(strHash);
-  if (!pcoinsTip->GetCoins(hash, coins)){
+  if (!pcoinsTip->GetCoins(hash, coins))
+  {
     LOCK(mempool.cs);
     CCoinsViewMemPool view(*pcoinsTip, mempool);
     if (!view.GetCoins(hash, coins))
-      return;
-    mempool.pruneSpent(hash, coins);
+      return false;
+    mempool.pruneSpent(hash, coins); 
   }
-  if (n<0 || (unsigned int)n>=coins.vout.size() || coins.vout[n].IsNull())
-    return;
 
-  o.push_back(Pair("value", ValueFromAmount(coins.vout[n].nValue)));
-  return;
+  if (n<0 || (unsigned int)n>=coins.vout.size() || coins.vout[n].IsNull())
+    return false;
+
+  int64 value;
+  value = coins.vout[n].nValue;
+  in.push_back(Pair("value", ValueFromAmount(value)));
+  total += value;
+  Addresses(coins.vout[n].scriptPubKey, addresses);
+  return true;
+}
+
+void GetSenderForTx()
+{
+
 }
 
 void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
@@ -131,25 +138,18 @@ void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& e
             o.push_back(Pair("asm", txin.scriptSig.ToString()));
             o.push_back(Pair("hex", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
             in.push_back(Pair("scriptSig", o));
-
-
-            //CTransaction prevtx;
-            //uint256 prevhashBlock = 0;
-            //vector<CTxDestination> get_sender_addresses;
-            //if (!txin.prevout.IsNull() && GetBlockTransaction(txin.prevout.hash, prevtx)){
-              //Addresses(prevtx.vout[txin.prevout.n].scriptPubKey, get_sender_addresses);
-              //int64 inValue;
-              //inValue = prevtx.vout[txin.prevout.n].nValue;
-              //total_in += inValue;
-              //in.push_back(Pair("value", ValueFromAmount(inValue)));
-            //}
-            //Array sender_address;
-            //BOOST_FOREACH(const CTxDestination& addr, get_sender_addresses)
-            //{
-              //sender_address.push_back(CBitcoinAddress(addr).ToString());
-              //sender_addresses.push_back(CBitcoinAddress(addr).ToString());
-            //}
-            //in.push_back(Pair("sender_addresses", sender_address));
+            uint256 prevhashBlock = 0;
+            vector<CTxDestination> get_sender_addresses;
+            if (!txin.prevout.IsNull()){
+              GetTxoutForSender(txin.prevout.hash, txin.prevout.n, total_in, get_sender_addresses, in);
+            }
+            Array sender_address;
+            BOOST_FOREACH(const CTxDestination& addr, get_sender_addresses)
+            {
+              sender_address.push_back(CBitcoinAddress(addr).ToString());
+              sender_addresses.push_back(CBitcoinAddress(addr).ToString());
+            }
+            in.push_back(Pair("sender_addresses", sender_address));
         }
         in.push_back(Pair("sequence", (boost::int64_t)txin.nSequence));
         vin.push_back(in);
