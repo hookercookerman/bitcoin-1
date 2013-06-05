@@ -74,34 +74,34 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
 
 Object blockToExtendedJSON(const CBlock& block, const CBlockIndex* blockindex)
 {
-    Object result;
-    result.push_back(Pair("hash", block.GetHash().GetHex()));
-    CMerkleTx txGen(block.vtx[0]);
-    txGen.SetMerkleBranch(&block);
-    result.push_back(Pair("confirmations", (int)txGen.GetDepthInMainChain()));
-    result.push_back(Pair("size", (int)::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION)));
-    result.push_back(Pair("height", blockindex->nHeight));
-    result.push_back(Pair("version", block.nVersion));
-    result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
-    Array txs;
-    BOOST_FOREACH(const CTransaction&tx, block.vtx)
-    {
-      Object tx_result;
-      TxToExtendedJSON(tx, block.GetHash(), tx_result);
-      txs.push_back(tx_result);
-    }
+  Object result;
+  result.push_back(Pair("hash", block.GetHash().GetHex()));
+  CMerkleTx txGen(block.vtx[0]);
+  txGen.SetMerkleBranch(&block);
+  result.push_back(Pair("confirmations", (int)txGen.GetDepthInMainChain()));
+  result.push_back(Pair("size", (int)::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION)));
+  result.push_back(Pair("height", blockindex->nHeight));
+  result.push_back(Pair("version", block.nVersion));
+  result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
+  Array txs;
+  BOOST_FOREACH(const CTransaction&tx, block.vtx)
+  {
+    Object tx_result;
+    TxToExtendedJSON(tx, block.GetHash(), tx_result);
+    txs.push_back(tx_result);
+  }
+  result.push_back(Pair("tx", txs));
+  result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
+  result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
+  result.push_back(Pair("bits", HexBits(block.nBits)));
+  result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
 
-    result.push_back(Pair("tx", txs));
-    result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
-    result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
-    result.push_back(Pair("bits", HexBits(block.nBits)));
-    result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
-
-    if (blockindex->pprev)
-        result.push_back(Pair("previousblockhash", blockindex->pprev->GetBlockHash().GetHex()));
-    if (blockindex->pnext)
-        result.push_back(Pair("nextblockhash", blockindex->pnext->GetBlockHash().GetHex()));
-    return result;
+  if (blockindex->pprev)
+      result.push_back(Pair("previousblockhash", blockindex->pprev->GetBlockHash().GetHex()));
+  CBlockIndex *pnext = blockindex->GetNextInMainChain();
+  if (pnext)
+      result.push_back(Pair("nextblockhash", pnext->GetBlockHash().GetHex()));
+  return result;
 }
 
 Value getblockcount(const Array& params, bool fHelp)

@@ -111,7 +111,9 @@ bool GetTxoutForSender(uint256 hash, int n, int64& total, vector<CTxDestination>
 void GetTxoutForSenderTx(uint256 hash, int n, int64& total, vector<CTxDestination>& addresses, Object& in)
 {
   CTransaction prevtx;
-  if (GetBlockTransaction(hash, prevtx)){
+  uint256 hashBlock = 0;
+  if (GetTransaction(hash, prevtx, hashBlock, true))
+  {
     Addresses(prevtx.vout[n].scriptPubKey, addresses);
     int64 value;
     value = prevtx.vout[n].nValue;
