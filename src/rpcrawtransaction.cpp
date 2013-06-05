@@ -102,14 +102,24 @@ bool GetTxoutForSender(uint256 hash, int n, int64& total, vector<CTxDestination>
   int64 value;
   value = coins.vout[n].nValue;
   in.push_back(Pair("value", ValueFromAmount(value)));
+  in.push_back(Pair("unspent", true));
   total += value;
   Addresses(coins.vout[n].scriptPubKey, addresses);
   return true;
 }
 
-void GetSenderForTx()
+void GetTxoutForSenderTx(uint256 hash, int n, int64& total, vector<CTxDestination>& addresses, Object& in)
 {
-
+  CTransaction prevtx;
+  if (GetBlockTransaction(hash, prevtx)){
+    Addresses(prevtx.vout[n].scriptPubKey, addresses);
+    int64 value;
+    value = prevtx.vout[n].nValue;
+    total += value;
+    in.push_back(Pair("spent", true));
+    in.push_back(Pair("value", ValueFromAmount(value)));
+  }
+  return;
 }
 
 void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
@@ -141,7 +151,8 @@ void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& e
             uint256 prevhashBlock = 0;
             vector<CTxDestination> get_sender_addresses;
             if (!txin.prevout.IsNull()){
-              GetTxoutForSender(txin.prevout.hash, txin.prevout.n, total_in, get_sender_addresses, in);
+              if (!GetTxoutForSender(txin.prevout.hash, txin.prevout.n, total_in, get_sender_addresses, in))
+                GetTxoutForSenderTx(txin.prevout.hash, txin.prevout.n, total_in, get_sender_addresses, in);
             }
             Array sender_address;
             BOOST_FOREACH(const CTxDestination& addr, get_sender_addresses)
