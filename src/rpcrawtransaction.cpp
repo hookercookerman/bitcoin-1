@@ -75,6 +75,157 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, Object& out)
     out.push_back(Pair("addresses", a));
 }
 
+void Addresses(const CScript& scriptPubKey, vector<CTxDestination>& addresses){
+  txnouttype type;
+  int nRequired;
+  if (!ExtractDestinations(scriptPubKey, type, addresses, nRequired))
+  {
+      return;
+  }
+}
+
+bool GetTxoutForSender(uint256 hash, int n, int64& total, vector<CTxDestination>& addresses, Object& in)
+{
+  CCoins coins;
+  if (!pcoinsTip->GetCoins(hash, coins))
+  {
+    LOCK(mempool.cs);
+    CCoinsViewMemPool view(*pcoinsTip, mempool);
+    if (!view.GetCoins(hash, coins))
+      return false;
+    mempool.pruneSpent(hash, coins); 
+  }
+
+  if (n<0 || (unsigned int)n>=coins.vout.size() || coins.vout[n].IsNull())
+    return false;
+
+  int64 value;
+  value = coins.vout[n].nValue;
+  in.push_back(Pair("value", ValueFromAmount(value)));
+  in.push_back(Pair("unspent", true));
+  total += value;
+  Addresses(coins.vout[n].scriptPubKey, addresses);
+  return true;
+}
+
+void GetTxoutForSenderTx(uint256 hash, int n, int64& total, vector<CTxDestination>& addresses, Object& in)
+{
+  CTransaction prevtx;
+  uint256 hashBlock = 0;
+  if (GetTransaction(hash, prevtx, hashBlock, true))
+  {
+    Addresses(prevtx.vout[n].scriptPubKey, addresses);
+    int64 value;
+    value = prevtx.vout[n].nValue;
+    total += value;
+    in.push_back(Pair("spent", true));
+    in.push_back(Pair("value", ValueFromAmount(value)));
+  }
+  return;
+}
+
+void TxToExtendedJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
+{
+    entry.push_back(Pair("txid", tx.GetHash().GetHex()));
+    entry.push_back(Pair("version", tx.nVersion));
+    entry.push_back(Pair("locktime", (boost::int64_t)tx.nLockTime));
+    Array vin;
+    int64 total_in = 0;
+    Array sender_address;
+    Array sender_addresses;
+    bool coinbase = false;
+    BOOST_FOREACH(const CTxIn& txin, tx.vin)
+    {
+        Object in;
+        if (tx.IsCoinBase())
+        {
+          in.push_back(Pair("coinbase", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
+          coinbase = true;
+        }
+        else
+        {
+            in.push_back(Pair("txid", txin.prevout.hash.GetHex()));
+            in.push_back(Pair("vout", (boost::int64_t)txin.prevout.n));
+            Object o;
+            o.push_back(Pair("asm", txin.scriptSig.ToString()));
+            o.push_back(Pair("hex", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
+            in.push_back(Pair("scriptSig", o));
+            uint256 prevhashBlock = 0;
+            vector<CTxDestination> get_sender_addresses;
+            if (!txin.prevout.IsNull()){
+              if (!GetTxoutForSender(txin.prevout.hash, txin.prevout.n, total_in, get_sender_addresses, in))
+                GetTxoutForSenderTx(txin.prevout.hash, txin.prevout.n, total_in, get_sender_addresses, in);
+            }
+            Array sender_address;
+            BOOST_FOREACH(const CTxDestination& addr, get_sender_addresses)
+            {
+              sender_address.push_back(CBitcoinAddress(addr).ToString());
+              sender_addresses.push_back(CBitcoinAddress(addr).ToString());
+            }
+            in.push_back(Pair("sender_addresses", sender_address));
+        }
+        in.push_back(Pair("sequence", (boost::int64_t)txin.nSequence));
+        vin.push_back(in);
+    }
+    entry.push_back(Pair("vin", vin));
+    Array vout;
+    int64 total = 0;
+    Array destination_addresses;
+    for (unsigned int i = 0; i < tx.vout.size(); i++)
+    {
+      const CTxOut& txout = tx.vout[i];
+      Object out;
+      out.push_back(Pair("value", ValueFromAmount(txout.nValue)));
+      total += txout.nValue;
+      out.push_back(Pair("n", (boost::int64_t)i));
+      Object o;
+      ScriptPubKeyToJSON(txout.scriptPubKey, o);
+      out.push_back(Pair("scriptPubKey", o));
+      vout.push_back(out);
+      vector<CTxDestination> ctx_destination_addresses;
+      Object ob;
+      Addresses(txout.scriptPubKey, ctx_destination_addresses);
+      BOOST_FOREACH(const CTxDestination& addr, ctx_destination_addresses)
+      {
+        destination_addresses.push_back(CBitcoinAddress(addr).ToString());
+      }
+    }
+    entry.push_back(Pair("vout", vout));
+    entry.push_back(Pair("destination_addresses", destination_addresses));
+    entry.push_back(Pair("sender_addresses", sender_addresses));
+    entry.push_back(Pair("total_output", ValueFromAmount(total)));
+    entry.push_back(Pair("total_input", ValueFromAmount(total_in)));
+    if (coinbase)
+    {
+      entry.push_back(Pair("fee", 0));
+      entry.push_back(Pair("coinbase", true));
+    }
+    else
+    {
+      entry.push_back(Pair("fee", ValueFromAmount(total_in - total)));
+      entry.push_back(Pair("coinbase", false));
+    }
+
+    if (hashBlock != 0)
+    {
+        entry.push_back(Pair("blockhash", hashBlock.GetHex()));
+        map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hashBlock);
+        if (mi != mapBlockIndex.end() && (*mi).second)
+        {
+            CBlockIndex* pindex = (*mi).second;
+            if (pindex->IsInMainChain())
+            {
+                entry.push_back(Pair("blockheight", pindex->nHeight));
+                entry.push_back(Pair("confirmations", 1 + nBestHeight - pindex->nHeight));
+                entry.push_back(Pair("time", (boost::int64_t)pindex->nTime));
+                entry.push_back(Pair("blocktime", (boost::int64_t)pindex->nTime));
+            }
+            else
+                entry.push_back(Pair("confirmations", 0));
+        }
+    }
+}
+
 void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
 {
     entry.push_back(Pair("txid", tx.GetHash().GetHex()));
@@ -130,6 +281,23 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
                 entry.push_back(Pair("confirmations", 0));
         }
     }
+}
+
+Value getextendedrawtransaction(const Array& params, bool fHelp)
+{
+  if (fHelp || params.size() < 1)
+      throw runtime_error("getrawtransaction <txid> \n");
+
+  uint256 hash = ParseHashV(params[0], "parameter 1");
+
+  CTransaction tx;
+  uint256 hashBlock = 0;
+  if (!GetTransaction(hash, tx, hashBlock, true))
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available about transaction");
+
+  Object result;
+  TxToExtendedJSON(tx, hashBlock, result);
+  return result;
 }
 
 Value getrawtransaction(const Array& params, bool fHelp)
